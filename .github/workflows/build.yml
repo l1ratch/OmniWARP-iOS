@@ -1,0 +1,215 @@
+name: Build Preview IPA
+
+# Версионирование X.Y.N:
+# X/Y меняются вручную в project.yml перед стабильным релизом.
+# N публикуется как текущая preview-сборка, затем CI коммитит N+1.
+# Пуш в main обновляет prerelease «preview» и gh-pages, теги не создаёт.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: preview-build
+  cancel-in-progress: false
+
+jobs:
+  build_ipa:
+    name: Build iOS Preview IPA
+    if: github.actor != 'github-actions[bot]'
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Install build tools
+        run: |
+          brew install xcodegen go
+          xcodegen --version
+          go version
+
+      - name: Select latest Xcode
+        run: |
+          XC=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          sudo xcode-select -s "$XC/Contents/Developer"
+          xcodebuild -version
+
+      - name: Read version
+        id: ver
+        shell: bash
+        run: |
+          BUILD=$(grep -m1 'OMW_BUILD:' project.yml | sed -E 's/.*"([0-9]+)".*/\1/')
+          BLOCK=$(grep -m1 'OMW_VERSION:' project.yml | sed -E 's/.*"([^"]+)".*/\1/')
+          test -n "$BUILD" && test -n "$BLOCK"
+          echo "build=$BUILD" >> "$GITHUB_OUTPUT"
+          echo "version=$BLOCK.$BUILD" >> "$GITHUB_OUTPUT"
+          echo "OmniWARP preview $BLOCK.$BUILD"
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Resolve Swift packages
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project OmniWARP.xcodeproj \
+            -scheme OmniWARP \
+            -derivedDataPath "$PWD/build"
+
+      - name: Build AmneziaWG core for simulator
+        run: bash scripts/build-awg-core.sh "$PWD/build" Debug iphonesimulator
+
+      - name: Run unit tests
+        shell: bash
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project OmniWARP.xcodeproj \
+            -scheme OmniWARP \
+            -configuration Debug \
+            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
+            -derivedDataPath "$PWD/build" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO 2>&1 | tee test_output.log
+
+      - name: Upload test log on failure
+        if: failure()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: test-log
+          path: test_output.log
+          if-no-files-found: ignore
+
+      - name: Build AmneziaWG core for device
+        run: bash scripts/build-awg-core.sh "$PWD/build" Release iphoneos
+
+      - name: Build unsigned iOS app
+        shell: bash
+        run: |
+          set -o pipefail
+          xcodebuild -project OmniWARP.xcodeproj \
+            -scheme OmniWARP \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$PWD/build" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            DEBUG_INFORMATION_FORMAT=dwarf \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            build 2>&1 | tee build_output.log
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: build-log
+          path: build_output.log
+          if-no-files-found: ignore
+
+      - name: Verify version and tunnel bundle
+        shell: bash
+        run: |
+          APP="build/Build/Products/Release-iphoneos/OmniWARP.app"
+          test -d "$APP"
+          test -d "$APP/PlugIns/OmniWARPTunnel.appex"
+          SHORT=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Info.plist")
+          BUNDLE=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP/Info.plist")
+          test "$SHORT" = "${{ steps.ver.outputs.version }}"
+          test "$BUNDLE" = "${{ steps.ver.outputs.build }}"
+          echo "Verified OmniWARP $SHORT ($BUNDLE) and OmniWARPTunnel.appex"
+
+      - name: Package unsigned IPA
+        run: |
+          mkdir -p Payload
+          cp -R "build/Build/Products/Release-iphoneos/OmniWARP.app" Payload/
+          zip -qry OmniWARP.ipa Payload
+          rm -rf Payload
+
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: OmniWARP-IPA
+          path: OmniWARP.ipa
+          if-no-files-found: error
+
+      - name: Stage next build number
+        id: bump
+        shell: bash
+        run: |
+          CUR=$(grep -m1 'OMW_BUILD:' project.yml | sed -E 's/.*"([0-9]+)".*/\1/')
+          NEXT=$((CUR + 1))
+          sed -i.bak -E "s/(OMW_BUILD: \")[0-9]+(\")/\1${NEXT}\2/" project.yml
+          rm -f project.yml.bak
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add project.yml
+          git commit -m "chore: next preview build ${NEXT} [skip ci]"
+          echo "next=$NEXT" >> "$GITHUB_OUTPUT"
+
+      - name: Push next build number
+        if: github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          if ! git push origin HEAD:refs/heads/main; then
+            git fetch origin main
+            git rebase origin/main
+            git push origin HEAD:refs/heads/main
+          fi
+
+      - name: Publish AltStore/GBox source to gh-pages
+        shell: bash
+        run: |
+          VERSION="${{ steps.ver.outputs.version }}"
+          SIZE=$(stat -f%z OmniWARP.ipa)
+          cp OmniWARP.ipa /tmp/omniwarp.ipa
+          cp OmniWARP.ipa /tmp/preview.ipa
+          cat > /tmp/source.json <<EOF
+          {
+            "name": "OmniWARP",
+            "identifier": "omniwarp.gh",
+            "sourceURL": "https://l1ratch.github.io/OmniWARP-iOS/source.json",
+            "apps": [
+              {
+                "name": "OmniWARP",
+                "bundleIdentifier": "com.omniwarp.OmniWARP",
+                "developerName": "l1ratch",
+                "version": "$VERSION",
+                "versionDate": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+                "versionDescription": "preview build $VERSION",
+                "size": $SIZE,
+                "downloadURL": "https://l1ratch.github.io/OmniWARP-iOS/omniwarp.ipa",
+                "localizedDescription": "AmneziaWG/WARP для iOS: подбор конфигурации и раздельное туннелирование по доменам. Неподписанный IPA — подпись выполняется при установке."
+              }
+            ]
+          }
+          EOF
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin gh-pages --depth=1 || true
+          git checkout -B gh-pages FETCH_HEAD 2>/dev/null || git checkout --orphan gh-pages
+          git rm -rf --cached . >/dev/null 2>&1 || true
+          cp /tmp/omniwarp.ipa omniwarp.ipa
+          cp /tmp/source.json source.json
+          git add -f omniwarp.ipa source.json
+          git commit -m "publish preview $VERSION" || echo "no changes"
+          git push -f origin gh-pages
+
+      - name: Update preview release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          VERSION="${{ steps.ver.outputs.version }}"
+          NOTES="Preview $VERSION. Unsigned IPA; app и OmniWARPTunnel.appex должны быть переподписаны при установке."
+          if gh release view preview >/dev/null 2>&1; then
+            gh release edit preview --title "OmniWARP Preview $VERSION" --notes "$NOTES"
+            gh release upload preview /tmp/preview.ipa --clobber
+          else
+            gh release create preview /tmp/preview.ipa \
+              --title "OmniWARP Preview $VERSION" \
+              --notes "$NOTES" \
+              --prerelease
+          fi

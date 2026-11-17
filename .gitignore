@@ -1,0 +1,43 @@
+# Generated Xcode project
+*.xcodeproj/
+*.xcworkspace/
+
+# Xcode build products and user state
+build/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+*.ipa
+*.xcarchive
+Payload/
+.swiftpm/
+
+# macOS
+.DS_Store
+
+# Swift Package Manager checkouts and caches
+# Package.resolved НЕ игнорируем: версии зависимостей должны быть воспроизводимы.
+.build/
+
+# AmneziaWG Go bridge build artifacts
+**/Sources/WireGuardKitGo/out/
+**/Sources/WireGuardKitGo/.tmp/
+
+# Local tooling output
+logs/
+*.log
+build_output.log
+test_output.log
+compile_error.txt
+dist/
+
+# Python helpers
+__pycache__/
+*.pyc
+*.pyo
+
+# Signing material and local secrets — never commit
+*.p12
+*.mobileprovision
+.env
+.env.*

@@ -1,0 +1,118 @@
+name: OmniWARP
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    TARGETED_DEVICE_FAMILY: "1,2"
+    ENABLE_BITCODE: NO
+    # Версионирование X.Y.N:
+    # X/Y меняются вручную перед стабильным релизом, N — только CI.
+    # Preview публикует X.Y.N и затем коммитит N+1 для следующей сборки.
+    OMW_VERSION: "0.1"
+    OMW_BUILD: "1"
+
+options:
+  bundleIdPrefix: com.omniwarp
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+# Pin the reviewed AmneziaWG revision. SPM does not build libwg-go.a itself;
+# run scripts/build-awg-core.sh after resolving packages and before building.
+packages:
+  WireGuardKit:
+    url: https://github.com/amnezia-vpn/amneziawg-apple.git
+    revision: 3bca528aca844bbe6b665d8ab5c6724cd261fd54
+
+targets:
+  OmniWARP:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+        excludes:
+          - Info.plist
+          - OmniWARP.entitlements
+      - path: Shared
+      # Pure Foundation pieces used by the in-app tunnel test driver. Do not
+      # add the whole Tunnel directory here: PacketTunnelProvider is NE-only.
+      - path: Tunnel/WarpEngine.swift
+      - path: Tunnel/CandidateValidator.swift
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: OmniWARP
+        CFBundleVersion: $(OMW_BUILD)
+        CFBundleShortVersionString: $(OMW_VERSION).$(OMW_BUILD)
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        ITSAppUsesNonExemptEncryption: false
+    entitlements:
+      path: App/OmniWARP.entitlements
+      properties:
+        com.apple.developer.networking.vpn.api: [allow-vpn]
+    dependencies:
+      - target: OmniWARPTunnel
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.omniwarp.OmniWARP
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+
+  OmniWARPTunnel:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Tunnel
+        excludes:
+          - Info.plist
+          - OmniWARPTunnel.entitlements
+      - path: Shared
+    info:
+      path: Tunnel/Info.plist
+      properties:
+        CFBundleDisplayName: OmniWARP Tunnel
+        CFBundleVersion: $(OMW_BUILD)
+        CFBundleShortVersionString: $(OMW_VERSION).$(OMW_BUILD)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).PacketTunnelProvider
+    entitlements:
+      path: Tunnel/OmniWARPTunnel.entitlements
+      properties:
+        com.apple.developer.networking.networkextension: [packet-tunnel-provider]
+    dependencies:
+      - package: WireGuardKit
+        product: WireGuardKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.omniwarp.OmniWARP.tunnel
+        APPLICATION_EXTENSION_API_ONLY: YES
+
+  OmniWARPTests:
+    type: bundle.unit-test
+    platform: iOS
+    # DNS/SNI sources are compiled into the test bundle as well as the tunnel:
+    # @testable import OmniWARP cannot see symbols from a separate .appex module.
+    sources:
+      - path: OmniWARPTests
+      - path: Shared
+      - path: Tunnel/DNSInterceptor.swift
+      - path: Tunnel/DomainRouter.swift
+      - path: Tunnel/SNIExtractor.swift
+    # The application dependency also supplies TEST_HOST/BUNDLE_LOADER.
+    dependencies:
+      - target: OmniWARP
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.omniwarp.OmniWARPTests
+        GENERATE_INFOPLIST_FILE: YES
+
+schemes:
+  OmniWARP:
+    build:
+      targets:
+        OmniWARP: all
+        OmniWARPTests: [test]
+    test:
+      targets:
+        - OmniWARPTests
