@@ -85,7 +85,7 @@ final class AppTunnelTestDriver: TunnelTestDriving {
             try await manager.saveToPreferences()
             try await manager.loadFromPreferences()
             try manager.connection.startVPNTunnel(options: [
-                ConfigurationSnapshot.providerConfigurationKey: snapshot
+                ConfigurationSnapshot.providerConfigurationKey: snapshot as NSData
             ])
             return session
         } catch {
@@ -328,7 +328,7 @@ final class AppTunnelTestSession: TunnelTestSession {
                 try await manager.loadFromPreferences()
                 if productionWasActive {
                     try manager.connection.startVPNTunnel(options: [
-                        ConfigurationSnapshot.providerConfigurationKey: productionSnapshot
+                        ConfigurationSnapshot.providerConfigurationKey: productionSnapshot as NSData
                     ])
                 }
             } catch {

@@ -180,7 +180,7 @@ final class TunnelManager: ObservableObject {
             observeStatus()
 
             try tunnelManager.connection.startVPNTunnel(options: [
-                ConfigurationSnapshot.providerConfigurationKey: snapshotJSON
+                ConfigurationSnapshot.providerConfigurationKey: snapshotJSON as NSData
             ])
             status = tunnelManager.connection.status
             startWatchdog(generation: generation)

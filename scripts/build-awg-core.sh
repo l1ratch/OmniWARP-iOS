@@ -21,9 +21,11 @@ SDK="${3:-iphoneos}"
 case "$SDK" in
   iphoneos)
     ARCHS="arm64"
+    DEPLOYMENT_FLAG="miphoneos-version-min"
     ;;
   iphonesimulator)
     ARCHS="x86_64 arm64"
+    DEPLOYMENT_FLAG="mios-simulator-version-min"
     ;;
   *)
     echo "error: sdk must be iphoneos or iphonesimulator (got: $SDK)" >&2
@@ -63,6 +65,8 @@ make -C "$WG_GO_DIR" \
   SDKROOT="$SDK_PATH" \
   CONFIGURATION_BUILD_DIR="$WG_GO_DIR/out" \
   CONFIGURATION_TEMP_DIR="$TEMP_DIR" \
+  DEPLOYMENT_TARGET_CLANG_FLAG_NAME="$DEPLOYMENT_FLAG" \
+  IPHONEOS_DEPLOYMENT_TARGET="17.0" \
   build version-header
 
 echo "AmneziaWG Go bridge ready: $WG_GO_DIR/out/libwg-go.a"
