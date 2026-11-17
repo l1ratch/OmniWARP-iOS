@@ -59,6 +59,7 @@ final class AppTunnelTestDriver: TunnelTestDriving {
             target: request.target,
             startedAt: startedAt,
             productionSnapshot: productionSnapshot,
+            productionServerAddress: productionServerAddress,
             productionWasActive: productionWasActive,
             productionWasEnabled: productionWasEnabled,
             tunnelManager: tunnelManager
@@ -126,6 +127,7 @@ final class AppTunnelTestSession: TunnelTestSession {
     private let manager: NETunnelProviderManager
     private let startedAt: Date
     private let productionSnapshot: Data?
+    private let productionServerAddress: String?
     private let productionWasActive: Bool
     private let productionWasEnabled: Bool
     private weak var tunnelManager: TunnelManager?
@@ -138,6 +140,7 @@ final class AppTunnelTestSession: TunnelTestSession {
         target: CandidateTarget,
         startedAt: Date,
         productionSnapshot: Data?,
+        productionServerAddress: String?,
         productionWasActive: Bool,
         productionWasEnabled: Bool,
         tunnelManager: TunnelManager?
@@ -147,6 +150,7 @@ final class AppTunnelTestSession: TunnelTestSession {
         self.target = target
         self.startedAt = startedAt
         self.productionSnapshot = productionSnapshot
+        self.productionServerAddress = productionServerAddress
         self.productionWasActive = productionWasActive
         self.productionWasEnabled = productionWasEnabled
         self.tunnelManager = tunnelManager
