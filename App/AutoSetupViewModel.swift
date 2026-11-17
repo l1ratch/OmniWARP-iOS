@@ -23,7 +23,8 @@ final class AutoSetupViewModel {
     func start(
         registration: WarpRegistrationViewModel,
         tunnel: TunnelManager,
-        domainLists: [DomainListEntry]
+        domainLists: [DomainListEntry],
+        awgSettings: AWGSettingsViewModel
     ) {
         guard runTask == nil, !isRunning else { return }
         statusMessage = nil
@@ -31,7 +32,7 @@ final class AutoSetupViewModel {
         progress = 0
         runTask = Task { [weak self] in
             guard let self else { return }
-            await self.run(registration: registration, tunnel: tunnel, domainLists: domainLists)
+            await self.run(registration: registration, tunnel: tunnel, domainLists: domainLists, awgSettings: awgSettings)
             self.runTask = nil
         }
     }
@@ -43,7 +44,8 @@ final class AutoSetupViewModel {
     private func run(
         registration: WarpRegistrationViewModel,
         tunnel: TunnelManager,
-        domainLists: [DomainListEntry]
+        domainLists: [DomainListEntry],
+        awgSettings: AWGSettingsViewModel
     ) async {
         isRunning = true
         defer { isRunning = false }
@@ -135,6 +137,8 @@ final class AutoSetupViewModel {
             phaseMessage = "Сохраняем лучший конфиг"
             progress = 0.93
             try registration.save(selectedConfig)
+            // Ручной reconnect использует тот же профиль, что и автоподбор.
+            awgSettings.apply(best.params)
 
             let descriptors = domainLists.filter(\.isEnabled).compactMap { entry -> DomainListDescriptor? in
                 guard let url = URL(string: entry.url) else { return nil }

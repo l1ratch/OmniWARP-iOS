@@ -65,7 +65,9 @@ struct RootView: View {
     }
 
     private var selectedEndpointCandidate: EndpointCandidate {
-        scouting.selectedCandidate?.endpointCandidate ?? EndpointScout.fallbackCandidate
+        scouting.selectedCandidate?.endpointCandidate
+            ?? registration.config?.endpoint
+            ?? EndpointScout.fallbackCandidate
     }
 
     private var selectedEndpoint: String {
@@ -175,7 +177,8 @@ struct RootView: View {
         autoSetup.start(
             registration: registration,
             tunnel: tunnelManager,
-            domainLists: domainLists.enabledLists
+            domainLists: domainLists.enabledLists,
+            awgSettings: awg
         )
     }
 
