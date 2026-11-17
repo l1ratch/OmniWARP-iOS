@@ -9,7 +9,7 @@ settings:
     # X/Y меняются вручную перед стабильным релизом, N — только CI.
     # Preview публикует X.Y.N и затем коммитит N+1 для следующей сборки.
     OMW_VERSION: "0.1"
-    OMW_BUILD: "3"
+    OMW_BUILD: "4"
 
 options:
   bundleIdPrefix: com.omniwarp
