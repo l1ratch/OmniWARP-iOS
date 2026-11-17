@@ -139,10 +139,14 @@ final class SplitTunnelController {
         refreshTask = Task { [router, resolver, weak self, weak provider] in
             await router.runRouteRefreshLoop(using: resolver, interval: interval) { snapshot in
                 guard let self, let provider, !Task.isCancelled else { return }
-                do {
-                    try await self.apply(routes: snapshot, to: provider, base: base)
-                } catch {
-                    NSLog("[OmniWARP][split] route update failed: %@", error.localizedDescription)
+                // DomainRouter callback is synchronous; NE settings update is async.
+                Task { [weak self, weak provider] in
+                    guard let self, let provider else { return }
+                    do {
+                        try await self.apply(routes: snapshot, to: provider, base: base)
+                    } catch {
+                        NSLog("[OmniWARP][split] route update failed: %@", error.localizedDescription)
+                    }
                 }
             }
         }
