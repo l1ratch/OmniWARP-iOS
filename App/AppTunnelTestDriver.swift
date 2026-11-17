@@ -44,6 +44,7 @@ final class AppTunnelTestDriver: TunnelTestDriving {
         let productionSnapshot = providerProtocol.providerConfiguration?[
             ConfigurationSnapshot.providerConfigurationKey
         ] as? Data
+        let productionServerAddress = providerProtocol.serverAddress
         let productionWasActive = manager.connection.status == .connected
             || manager.connection.status == .connecting
             || manager.connection.status == .reasserting
@@ -78,6 +79,7 @@ final class AppTunnelTestDriver: TunnelTestDriving {
                 dnsServers: configuration.dns
             ).jsonData()
             providerProtocol.providerBundleIdentifier = providerBundleIdentifier
+            providerProtocol.serverAddress = configuration.endpoint?.id ?? request.target.endpointString
             providerProtocol.providerConfiguration = [ConfigurationSnapshot.providerConfigurationKey: snapshot]
             manager.protocolConfiguration = providerProtocol
             manager.localizedDescription = "OmniWARP — проверка endpoint"
@@ -317,6 +319,7 @@ final class AppTunnelTestSession: TunnelTestSession {
         if let productionSnapshot {
             let providerProtocol = (manager.protocolConfiguration as? NETunnelProviderProtocol)
                 ?? NETunnelProviderProtocol()
+            providerProtocol.serverAddress = productionServerAddress
             providerProtocol.providerConfiguration = [
                 ConfigurationSnapshot.providerConfigurationKey: productionSnapshot
             ]

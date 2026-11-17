@@ -165,6 +165,9 @@ final class TunnelManager: ObservableObject {
             let providerProtocol = (tunnelManager.protocolConfiguration as? NETunnelProviderProtocol)
                 ?? NETunnelProviderProtocol()
             providerProtocol.providerBundleIdentifier = providerBundleIdentifier
+            // NETunnelProviderProtocol валидирует serverAddress при старте.
+            // Без него iOS отклоняет конфигурацию с "Missing server address".
+            providerProtocol.serverAddress = endpoint
             providerProtocol.providerConfiguration = [
                 ConfigurationSnapshot.providerConfigurationKey: snapshotJSON
             ]
