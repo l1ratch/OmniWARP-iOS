@@ -350,7 +350,7 @@ final class AppTunnelTestSession: TunnelTestSession {
         guard let session = manager.connection as? NETunnelProviderSession else {
             throw WarpEngineError.engineUnavailable("NETunnelProviderSession недоступна.")
         }
-        let data = try await ProviderMessageClient.stats(from: session, timeout: 1)
+        let data = try await ProviderMessageClient.stats(from: session, timeout: 2)
         let stats = try JSONDecoder().decode(ProviderStats.self, from: data)
         if stats.ok == false {
             throw WarpEngineError.handshakeFailed(stats.error ?? "Core unavailable: ошибка валидатора.")

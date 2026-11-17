@@ -73,13 +73,14 @@ final class AutoSetupViewModel {
                     self?.progress = 0.05 + update.fraction * 0.20
                 }
             }
-            let endpoints = Array(scoutCandidates.prefix(3))
+            let endpoints = EndpointScout.validationCandidates(from: scoutCandidates, limit: 3)
             guard !endpoints.isEmpty else { throw AutoSetupError.noEndpoints }
             try Task.checkCancellation()
 
             let profiles: [AmneziaWGParams] = [.zapretPreset, .random(), .random()]
             var best: BestConfiguration?
             var restorationErrors: [String] = []
+            var validationReasons: [String] = []
 
             for (profileIndex, params) in profiles.enumerated() {
                 try Task.checkCancellation()
@@ -101,6 +102,12 @@ final class AutoSetupViewModel {
                     baseConfiguration: baseConfig
                 )
                 restorationErrors.append(contentsOf: driver.restorationErrors)
+                for validation in report.validations where !validation.isUsable {
+                    validationReasons.append("\(validation.displayEndpoint): \(validation.status.title)")
+                }
+                if case .driverUnavailable(let reason) = report.stopReason {
+                    validationReasons.append(reason)
+                }
                 try Task.checkCancellation()
 
                 if let candidate = report.best {
@@ -113,9 +120,11 @@ final class AutoSetupViewModel {
             }
 
             guard let best else {
-                throw AutoSetupError.noWorkingConfiguration(
-                    restorationErrors.isEmpty ? nil : restorationErrors.joined(separator: "; ")
-                )
+                if validationReasons.isEmpty {
+                    validationReasons.append("Нет подтверждённого handshake + HTTPS ни для одного кандидата.")
+                }
+                validationReasons.append(contentsOf: restorationErrors)
+                throw AutoSetupError.noWorkingConfiguration(validationReasons)
             }
 
             let target = best.validation.target
@@ -195,7 +204,7 @@ final class AutoSetupViewModel {
 enum AutoSetupError: LocalizedError {
     case registrationFailed(String)
     case noEndpoints
-    case noWorkingConfiguration(String?)
+    case noWorkingConfiguration([String])
     case connectionFailed(String)
 
     var errorDescription: String? {
@@ -204,12 +213,9 @@ enum AutoSetupError: LocalizedError {
             return "Не удалось получить WARP-конфигурацию: \(reason)"
         case .noEndpoints:
             return "EndpointScout не нашёл точки входа для проверки."
-        case .noWorkingConfiguration(let restorationDetails):
-            var message = "Ни один AWG-профиль не прошёл handshake + HTTPS. Подключение не выполнялось."
-            if let restorationDetails, !restorationDetails.isEmpty {
-                message += " Ошибки восстановления тестовых туннелей: \(restorationDetails)"
-            }
-            return message
+        case .noWorkingConfiguration(let reasons):
+            let details = reasons.prefix(6).joined(separator: " · ")
+            return "Ни один AWG-профиль не прошёл handshake + HTTPS. Подключение не выполнялось. Причины: \(details). Если ключи получены старой версией — нажмите «Обновить ключи» и повторите."
         case .connectionFailed(let reason):
             return "Конфиг выбран и сохранён, но запуск туннеля не удался: \(reason)"
         }

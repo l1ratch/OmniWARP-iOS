@@ -149,6 +149,43 @@ public struct EndpointScout: Sendable {
         }
     }
 
+    /// Формирует набор для реального AWG handshake, а не просто fastest-HTTP top-N.
+    /// Порт 4500 обязан попасть в проверку: это основной WARP-порт и во многих
+    /// сетях единственный рабочий. Затем добавляются альтернативные порты и IP.
+    public static func validationCandidates(
+        from candidates: [EndpointCandidate],
+        limit: Int = 3
+    ) -> [EndpointCandidate] {
+        guard limit > 0 else { return [] }
+        var selected: [EndpointCandidate] = []
+        var identifiers = Set<String>()
+
+        func append(_ candidate: EndpointCandidate) {
+            guard selected.count < limit, identifiers.insert(candidate.id).inserted else { return }
+            selected.append(candidate)
+        }
+
+        for port in [4500, 2408, 500, 987] {
+            guard selected.count < limit else { break }
+            let bestForPort = candidates
+                .filter { $0.port == port }
+                .min { ($0.rttMilliseconds ?? .infinity) < ($1.rttMilliseconds ?? .infinity) }
+            if let bestForPort { append(bestForPort) }
+        }
+
+        // Если остались места, добавляем endpoint'ы на других IP, чтобы не
+        // проверять всё на одной проблемной подсети.
+        for candidate in candidates where selected.count < limit {
+            if selected.contains(where: { $0.ip == candidate.ip }) { continue }
+            append(candidate)
+        }
+        // Портовое разнообразие важнее, но при малом наборе добираем любые.
+        for candidate in candidates where selected.count < limit {
+            append(candidate)
+        }
+        return selected.isEmpty && !candidates.isEmpty ? [fallbackCandidate] : selected
+    }
+
     /// AsyncStream-вариант API. Отмена потребления stream отменяет всю операцию.
     public func scoutEvents() -> AsyncThrowingStream<Event, Error> {
         AsyncThrowingStream { continuation in

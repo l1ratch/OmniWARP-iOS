@@ -108,7 +108,8 @@ struct RootView: View {
             amneziaWG: params,
             endpoint: selectedEndpointCandidate
         )
-        let topCandidates = Array(candidates.prefix(8))
+        let topCandidates = EndpointScout.validationCandidates(from: candidates.map(\.endpointCandidate), limit: 8)
+            .map(ScoutingCandidate.init)
         guard topCandidates.isEmpty == false else {
             return ScoutingValidationResult(
                 candidates: candidates,

@@ -85,6 +85,21 @@ final class CoreLogicTests: XCTestCase {
         XCTAssertTrue(text.contains("Endpoint = 188.114.96.1:2408"))
     }
 
+    func testValidationCandidatesIncludeStandardWarpPort() {
+        let candidates = [
+            EndpointCandidate(ip: "188.114.96.1", port: 500, rttMilliseconds: 1),
+            EndpointCandidate(ip: "188.114.96.1", port: 987, rttMilliseconds: 1),
+            EndpointCandidate(ip: "188.114.96.1", port: 2408, rttMilliseconds: 1),
+            EndpointCandidate(ip: "188.114.97.1", port: 4500, rttMilliseconds: 50),
+            EndpointCandidate(ip: "188.114.98.1", port: 4500, rttMilliseconds: 60)
+        ]
+        let selected = EndpointScout.validationCandidates(from: candidates, limit: 3)
+        XCTAssertEqual(selected.count, 3)
+        XCTAssertTrue(selected.contains { $0.port == 4500 }, "Основной WARP-порт обязан проверяться")
+        XCTAssertTrue(selected.contains { $0.port == 2408 })
+        XCTAssertTrue(selected.contains { $0.port == 500 })
+    }
+
     // MARK: - DomainList
 
     func testDomainListParsing() {
