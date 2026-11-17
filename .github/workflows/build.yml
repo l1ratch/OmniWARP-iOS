@@ -212,9 +212,14 @@ jobs:
           git rm -rf --cached . >/dev/null 2>&1 || true
           cp /tmp/omniwarp.ipa omniwarp.ipa
           cp /tmp/source.json source.json
-          git add -f -- omniwarp.ipa source.json
+          test -s omniwarp.ipa
+          test -s source.json
+          # На runner обычный git add -f не включает IPA в index.
+          # Хешируем содержимое и регистрируем его напрямую, без ignore-правил.
+          IPA_SHA=$(git hash-object -w omniwarp.ipa)
+          git update-index --add --cacheinfo 100644,"$IPA_SHA",omniwarp.ipa
+          git add -f -- source.json
           git status --short
-          # Манифест не должен публиковаться без самого IPA.
           git ls-files --error-unmatch -- omniwarp.ipa source.json
           git commit -m "publish preview $VERSION" || echo "no changes"
           git push -f origin gh-pages
