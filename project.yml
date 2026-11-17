@@ -87,6 +87,11 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.omniwarp.OmniWARP.tunnel
         APPLICATION_EXTENSION_API_ONLY: YES
+        # Upstream Package.swift задаёт относительный -L Sources/WireGuardKitGo/out.
+        # Из app-проекта он неверен: явно указываем каталог resolved checkout.
+        LIBRARY_SEARCH_PATHS:
+          - "$(DERIVED_DATA_DIR)/SourcePackages/checkouts/amneziawg-apple/Sources/WireGuardKitGo/out"
+          - "$(inherited)"
 
   OmniWARPTests:
     type: bundle.unit-test
