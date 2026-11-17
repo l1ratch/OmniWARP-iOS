@@ -300,7 +300,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         var ipv6Addresses: [(address: String, prefixLength: UInt8)] = []
         for range in configuration.interface.addresses {
             if let address = range.address as? IPv4Address {
-                ipv4Addresses.append((address.debugDescription, range.subnetMask().debugDescription))
+                ipv4Addresses.append((address.debugDescription, String(describing: range.subnetMask())))
             } else if let address = range.address as? IPv6Address {
                 ipv6Addresses.append((address.debugDescription, range.networkPrefixLength))
             }
