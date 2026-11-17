@@ -63,8 +63,11 @@ public struct EndpointScout: Sendable {
     ]
 
     /// Явно неизмеренный fallback. Он не содержит выдуманных RTT, loss или HTTP status.
+    /// Используется готовый IPv4: extension не обязан уметь DNS-резолв hostname
+    /// до того, как туннель начал передавать пакеты. `engage.cloudflareclient.com`
+    /// сейчас указывает на этот anycast-адрес.
     public static let fallbackCandidate = EndpointCandidate(
-        ip: "engage.cloudflareclient.com",
+        ip: "162.159.192.1",
         port: 4500,
         source: .fallback
     )
