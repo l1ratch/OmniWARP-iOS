@@ -67,11 +67,30 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
+          DESTINATION=$(python3 - <<'PY'
+          import json, subprocess
+          data = json.loads(subprocess.check_output([
+              "xcrun", "simctl", "list", "devices", "available", "-j"
+          ]))
+          phones = [
+              (runtime, device)
+              for runtime, devices in data["devices"].items()
+              for device in devices
+              if device.get("isAvailable") and "iPhone" in device["name"]
+          ]
+          if phones:
+              _, device = sorted(phones, key=lambda item: item[0])[-1]
+              print(f"platform=iOS Simulator,id={device['udid']}")
+          else:
+              print("platform=iOS Simulator,name=Any iOS Simulator Device")
+          PY
+          )
+          echo "Test destination: $DESTINATION"
           xcodebuild test \
             -project OmniWARP.xcodeproj \
             -scheme OmniWARP \
             -configuration Debug \
-            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
+            -destination "$DESTINATION" \
             -derivedDataPath "$PWD/build" \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
             COMPILER_INDEX_STORE_ENABLE=NO 2>&1 | tee test_output.log
