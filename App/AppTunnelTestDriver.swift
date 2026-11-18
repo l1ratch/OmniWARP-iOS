@@ -160,10 +160,16 @@ final class AppTunnelTestSession: TunnelTestSession {
         guard !stopped else { throw WarpEngineError.invalidState("Тестовая сессия уже остановлена.") }
         let clockStart = WarpMonotonicClock.now()
         let deadline = clockStart + max(0.5, timeout)
+        var hasObservedStartup = false
 
         while WarpMonotonicClock.now() < deadline {
             if Task.isCancelled { throw WarpEngineError.cancelled }
-            if manager.connection.status == .connected {
+            let status = manager.connection.status
+            if status == .connecting || status == .reasserting {
+                hasObservedStartup = true
+            }
+            if status == .connected {
+                hasObservedStartup = true
                 do {
                     let stats = try await requestStats()
                     if let handshakeAt = stats.lastHandshakeAt,
@@ -183,7 +189,7 @@ final class AppTunnelTestSession: TunnelTestSession {
                     // Core может ещё запускаться. Повторяем до deadline;
                     // сам факт NE connected handshake не подтверждает.
                 }
-            } else if manager.connection.status == .disconnected || manager.connection.status == .invalid {
+            } else if (status == .disconnected || status == .invalid), hasObservedStartup {
                 throw WarpEngineError.handshakeFailed("Системный тестовый туннель отключился до handshake.")
             }
             do { try await Task.sleep(for: .milliseconds(250)) } catch { throw WarpEngineError.cancelled }
