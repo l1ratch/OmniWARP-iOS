@@ -197,8 +197,10 @@ IPA неподписанный: это артефакт сборки, а не о
 - Ключ snapshot: `configurationSnapshot`; значение: `Data` от `JSONEncoder`.
 - Запрос статистики: JSON `{"command":"stats","request":"stats"}` (достаточно
   любого из двух ключей со значением `stats`).
-- Успешный ответ: `ok`, `receivedBytes`, `transmittedBytes` и опциональный Unix
-  timestamp `lastHandshake`.
+- Успешный ответ: `ok`, `receivedBytes`, `transmittedBytes` и `lastHandshake` —
+  монотонный счётчик ядра `last_handshake_time_sec` (секунды с момента запуска
+  ядра, НЕ unix-time). `lastHandshake > 0` означает подтверждённый handshake
+  текущей сессии ядра.
 - Ошибка: `{"ok":false,"error":"..."}`.
 
 ## Минимальный fixture для проверки парсера

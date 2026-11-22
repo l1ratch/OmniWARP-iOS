@@ -677,10 +677,10 @@ public final class WireGuardKitEngine: WarpEngine, @unchecked Sendable {
 
             if let text = await readRuntimeConfiguration(adapter),
                let runtime = WarpRuntimeConfiguration(uapi: text),
-               let peer = runtime.freshHandshake(notBefore: startWall),
+               let peer = runtime.freshHandshake(),
                Self.endpointMatches(peer: peer, target: target) {
                 return HandshakeOutcome(observedAt: Date(),
-                                        lastHandshakeAt: peer.lastHandshakeAt ?? Date(),
+                                        lastHandshakeAt: Date(),
                                         attemptDurationMs: WarpMonotonicClock.millisecondsSince(started),
                                         source: .runtimeConfiguration,
                                         rxBytes: runtime.totalRxBytes,
@@ -719,7 +719,7 @@ public final class WireGuardKitEngine: WarpEngine, @unchecked Sendable {
         return WarpEngineStats(sampledAt: Date(),
                                rxBytes: runtime.totalRxBytes,
                                txBytes: runtime.totalTxBytes,
-                               lastHandshakeAt: runtime.latestHandshakeAt,
+                               lastHandshakeAt: runtime.hasConfirmedHandshake ? Date() : nil,
                                endpoint: runtime.primaryPeer?.endpoint)
     }
 

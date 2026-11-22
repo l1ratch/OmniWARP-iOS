@@ -346,10 +346,12 @@ final class TunnelManager: ObservableObject {
             throw TunnelManagerError.malformedProviderResponse
         }
 
+        // `last_handshake_time_sec` — монотонные секунды ядра с момента его
+        // запуска, а НЕ unix-время. Как приближение отматываем счётчик от «сейчас».
         return TunnelTrafficStats(
             receivedBytes: received ?? 0,
             transmittedBytes: transmitted ?? 0,
-            lastHandshake: handshake.flatMap { $0 > 0 ? Date(timeIntervalSince1970: $0) : nil }
+            lastHandshake: handshake.flatMap { $0 > 0 ? Date().addingTimeInterval(-$0) : nil }
         )
     }
 

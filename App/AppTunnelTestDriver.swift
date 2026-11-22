@@ -172,11 +172,13 @@ final class AppTunnelTestSession: TunnelTestSession {
                 hasObservedStartup = true
                 do {
                     let stats = try await requestStats()
-                    if let handshakeAt = stats.lastHandshakeAt,
-                       handshakeAt >= startedAt.addingTimeInterval(-1) {
+                    // Тестовый NE поднимает ядро с нуля для каждого кандидата,
+                    // поэтому ненулевой last_handshake_time_sec может относиться
+                    // только к текущей проверке.
+                    if stats.hasHandshake {
                         let outcome = HandshakeOutcome(
                             observedAt: Date(),
-                            lastHandshakeAt: handshakeAt,
+                            lastHandshakeAt: Date(),
                             attemptDurationMs: WarpMonotonicClock.millisecondsSince(clockStart),
                             source: .runtimeConfiguration,
                             rxBytes: stats.receivedBytes ?? 0,
@@ -314,7 +316,7 @@ final class AppTunnelTestSession: TunnelTestSession {
             sampledAt: Date(),
             rxBytes: stats.receivedBytes ?? 0,
             txBytes: stats.transmittedBytes ?? 0,
-            lastHandshakeAt: stats.lastHandshakeAt,
+            lastHandshakeAt: stats.hasHandshake ? Date() : nil,
             endpoint: target.endpointString
         )
     }
@@ -379,10 +381,16 @@ private struct ProviderStats: Decodable {
     var ok: Bool?
     var receivedBytes: UInt64?
     var transmittedBytes: UInt64?
-    var lastHandshake: TimeInterval?
+    /// Монотонные секунды `last_handshake_time_sec` из ядра, а НЕ unix-время.
+    var lastHandshakeSec: TimeInterval?
     var error: String?
 
-    var lastHandshakeAt: Date? {
-        lastHandshake.flatMap { $0 > 0 ? Date(timeIntervalSince1970: $0) : nil }
+    enum CodingKeys: String, CodingKey {
+        case ok, receivedBytes, transmittedBytes, error
+        case lastHandshakeSec = "lastHandshake"
+    }
+
+    var hasHandshake: Bool {
+        (lastHandshakeSec ?? 0) > 0
     }
 }

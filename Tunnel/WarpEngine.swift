@@ -550,24 +550,28 @@ public struct WarpRuntimeConfiguration: Sendable, Equatable {
     public struct Peer: Sendable, Equatable {
         public let publicKey: String
         public let endpoint: String?
-        public let lastHandshakeAt: Date?
+        /// Сырое значение `last_handshake_time_sec` из UAPI ядра.
+        /// Это монотонное время с момента запуска ядра, А НЕ unix-время.
+        public let lastHandshakeTimeSec: UInt64
         public let rxBytes: UInt64
         public let txBytes: UInt64
         public let persistentKeepalive: String?
 
         public init(publicKey: String,
                     endpoint: String?,
-                    lastHandshakeAt: Date?,
+                    lastHandshakeTimeSec: UInt64,
                     rxBytes: UInt64,
                     txBytes: UInt64,
                     persistentKeepalive: String?) {
             self.publicKey = publicKey
             self.endpoint = endpoint
-            self.lastHandshakeAt = lastHandshakeAt
+            self.lastHandshakeTimeSec = lastHandshakeTimeSec
             self.rxBytes = rxBytes
             self.txBytes = txBytes
             self.persistentKeepalive = persistentKeepalive
         }
+
+        public var hasHandshake: Bool { lastHandshakeTimeSec > 0 }
 
         public var endpointTarget: CandidateTarget? {
             endpoint.flatMap { CandidateTarget(endpoint: $0) }
@@ -599,15 +603,11 @@ public struct WarpRuntimeConfiguration: Sendable, Equatable {
                 current.removeAll()
                 return
             }
-            let seconds = current["last_handshake_time_sec"].flatMap { Int64($0) } ?? 0
-            let nanoseconds = current["last_handshake_time_nsec"].flatMap { Int64($0) } ?? 0
-            let handshakeAt: Date? = seconds > 0
-                ? Date(timeIntervalSince1970: TimeInterval(seconds) + TimeInterval(nanoseconds) / 1_000_000_000)
-                : nil
+            let seconds = current["last_handshake_time_sec"].flatMap { UInt64($0) } ?? 0
             let peer = Peer(
                 publicKey: publicKey,
                 endpoint: current["endpoint"],
-                lastHandshakeAt: handshakeAt,
+                lastHandshakeTimeSec: seconds,
                 rxBytes: current["rx_bytes"].flatMap { UInt64($0) } ?? 0,
                 txBytes: current["tx_bytes"].flatMap { UInt64($0) } ?? 0,
                 persistentKeepalive: current["persistent_keepalive_interval"]
@@ -653,9 +653,17 @@ public struct WarpRuntimeConfiguration: Sendable, Equatable {
         self.peers = peers
     }
 
-    /// Самая свежая метка handshake среди всех пиров.
-    public var latestHandshakeAt: Date? {
-        peers.compactMap { $0.lastHandshakeAt }.max()
+    /// Есть ли у хотя бы одного пира подтверждённый handshake.
+    /// Для свежеподнятого ядра (каждый кандидат стартует с нуля) ненулевой
+    /// `last_handshake_time_sec` может относиться только к текущей сессии.
+    public var hasConfirmedHandshake: Bool {
+        peers.contains { $0.hasHandshake }
+    }
+
+    /// Максимум монотонных секунд handshake среди пиров.
+    public var latestHandshakeTimeSec: UInt64? {
+        let values = peers.filter { $0.hasHandshake }.map { $0.lastHandshakeTimeSec }
+        return values.max()
     }
 
     public var totalRxBytes: UInt64 {
@@ -668,15 +676,11 @@ public struct WarpRuntimeConfiguration: Sendable, Equatable {
 
     public var primaryPeer: Peer? { peers.first }
 
-    /// Handshake, который произошёл не раньше `cutoff`. Именно этот критерий
-    /// используется валидатором: старый handshake с прошлого конфига не считается
-    /// доказательством для нового кандидата.
-    public func freshHandshake(notBefore cutoff: Date, tolerance: TimeInterval = 1.0) -> Peer? {
-        let lowerBound = cutoff.addingTimeInterval(-tolerance)
-        return peers.first { peer in
-            guard let handshakeAt = peer.lastHandshakeAt else { return false }
-            return handshakeAt >= lowerBound
-        }
+    /// Подтверждённый handshake текущего сеанса ядра. `cutoff` сохранён только
+    /// для совместимости сигнатуры: сравнение с unix-временем здесь невозможно,
+    /// потому что ядро отдаёт монотонные секунды с момента своего запуска.
+    public func freshHandshake(notBefore cutoff: Date? = nil) -> Peer? {
+        peers.first { $0.hasHandshake }
     }
 }
 
