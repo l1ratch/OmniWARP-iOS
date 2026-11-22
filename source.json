@@ -1,0 +1,18 @@
+{
+  "name": "OmniWARP",
+  "identifier": "omniwarp.gh",
+  "sourceURL": "https://l1ratch.github.io/OmniWARP-iOS/source.json",
+  "apps": [
+    {
+      "name": "OmniWARP",
+      "bundleIdentifier": "com.omniwarp.OmniWARP",
+      "developerName": "l1ratch",
+      "version": "0.1.11",
+      "versionDate": "2026-11-22T12:19:55Z",
+      "versionDescription": "preview build 0.1.11",
+      "size": 12777378,
+      "downloadURL": "https://l1ratch.github.io/OmniWARP-iOS/omniwarp.ipa",
+      "localizedDescription": "AmneziaWG/WARP для iOS: подбор конфигурации и раздельное туннелирование по доменам. Неподписанный IPA — подпись выполняется при установке."
+    }
+  ]
+}
