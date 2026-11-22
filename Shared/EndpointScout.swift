@@ -72,6 +72,17 @@ public struct EndpointScout: Sendable {
         source: .fallback
     )
 
+    /// Кандидаты для brute-force handshake-проверки, когда trace-пробы недоступны
+    /// (DPI режет HTTP, ATS, captive portal). Handshake — это ground truth:
+    /// точка либо отвечает на UDP, либо нет, и trace для этого не обязателен.
+    public static func anchorCandidates(ports: [UInt16] = [4500]) -> [EndpointCandidate] {
+        ports.flatMap { port in
+            subnets.map { subnet in
+                EndpointCandidate(ip: "\(subnet).1", port: port, source: .anchor)
+            }
+        }
+    }
+
     public let configuration: Configuration
     private let session: URLSession
 
@@ -226,7 +237,10 @@ public struct EndpointScout: Sendable {
             // HTTPS первичен: DPI на сотовых сетях режет plain HTTP
             // к IP, не входящим в белый список. HTTPS-пакет к Cloudflare
             // TTL-маскировкой обойти сложнее, но trace на том же IP работает.
-            let schemes = ["https", "http"]
+            // HTTP первичен: ровно так же, как curl в Zapret-Manager
+            // (Host: trace.cloudflare.com к IP). HTTPS к голому IP почти
+            // всегда падает на проверке сертификата, поэтому он — запасной.
+            let schemes = ["http", "https"]
             for scheme in schemes {
                 guard let url = URL(string: "\(scheme)://\(ip)/cdn-cgi/trace") else {
                     throw EndpointScoutError.invalidIPv4

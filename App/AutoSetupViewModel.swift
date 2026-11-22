@@ -73,7 +73,17 @@ final class AutoSetupViewModel {
                     self?.progress = 0.05 + update.fraction * 0.20
                 }
             }
-            let endpoints = EndpointScout.validationCandidates(from: scoutCandidates, limit: 3)
+            let realCandidates = scoutCandidates.filter { $0.source != .fallback }
+            var endpoints: [EndpointCandidate]
+            if realCandidates.isEmpty {
+                // Trace недоступен (DPI/сеть) — brute-force по anchor-IP
+                // подсетей Cloudflare: handshake сам докажет работоспособность.
+                phaseMessage = "Trace недоступен, проверяю точки входа напрямую"
+                endpoints = Array(EndpointScout.anchorCandidates(ports: [4500]).prefix(4))
+                endpoints.append(EndpointScout.fallbackCandidate)
+            } else {
+                endpoints = EndpointScout.validationCandidates(from: scoutCandidates, limit: 3)
+            }
             guard !endpoints.isEmpty else { throw AutoSetupError.noEndpoints }
             try Task.checkCancellation()
 
@@ -117,6 +127,12 @@ final class AutoSetupViewModel {
                     let candidateBest = BestConfiguration(validation: candidate, params: params)
                     if best == nil || Self.isBetter(candidate, than: best!.validation) {
                         best = candidateBest
+                    }
+                    // Найден рабочий handshake + HTTPS — другие профили только
+                    // тратят время (brute-force путь и так до 5 минут).
+                    if candidate.status.isConfirmed {
+                        progress = 0.9
+                        break
                     }
                 }
                 progress = 0.25 + Double(profileIndex + 1) / Double(profiles.count) * 0.65

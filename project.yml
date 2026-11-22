@@ -47,6 +47,11 @@ targets:
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         ITSAppUsesNonExemptEncryption: false
+        # Cloudflare trace-пробы scout'а идут по plain HTTP к IP-адресам
+        # (как curl в Zapret-Manager). Без исключения ATS URLSession
+        # отклоняет их ещё до сети и scout не находит ни одного кандидата.
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
     entitlements:
       path: App/OmniWARP.entitlements
       properties:
