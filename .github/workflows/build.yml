@@ -174,6 +174,9 @@ jobs:
         run: |
           if ! git push origin HEAD:refs/heads/main; then
             git fetch origin main
+            # xcodegen перегенерирует App/Info.plist в рабочем дереве; эти
+            # изменения не относятся к bump-коммиту — отбрасываем до rebase.
+            git checkout -- .
             git rebase origin/main
             git push origin HEAD:refs/heads/main
           fi
