@@ -23,7 +23,7 @@ public struct EndpointScout: Sendable {
             probesPerHost: Int = 2,
             maxConcurrentProbes: Int = 12,
             requestTimeout: TimeInterval = 4,
-            excludedColos: Set<String> = ["DME", "SVX", "LED", "KJA", "REN", "OVB", "KZN", "AER", "VVO"]
+            excludedColos: Set<String> = []
         ) {
             self.randomHostsPerSubnet = max(0, randomHostsPerSubnet)
             self.ports = ports.filter { $0 > 0 }.reduce(into: [UInt16]()) { unique, port in
@@ -208,6 +208,8 @@ public struct EndpointScout: Sendable {
     }
 
     /// Выполняет настоящие trace-запросы к одному IPv4 и агрегирует их результат.
+    /// Пытается HTTPS (порт 443) первым: на сотовых сетях РФ plain HTTP к
+    /// произвольным IP часто перехватывается DPI. HTTP — запасной вариант.
     /// Метод не отбрасывает запрещённые colo — фильтрация происходит в `scout`.
     public func probe(ip: String) async throws -> TraceResult {
         guard IPv4Address(ip) != nil else { throw EndpointScoutError.invalidIPv4 }
@@ -220,42 +222,50 @@ public struct EndpointScout: Sendable {
 
         for _ in 0..<configuration.probesPerHost {
             try Task.checkCancellation()
-            guard let url = URL(string: "http://\(ip)/cdn-cgi/trace") else {
-                throw EndpointScoutError.invalidIPv4
-            }
-            var request = URLRequest(
-                url: url,
-                cachePolicy: .reloadIgnoringLocalAndRemoteCacheData,
-                timeoutInterval: configuration.requestTimeout
-            )
-            request.httpMethod = "GET"
-            request.setValue("trace.cloudflare.com", forHTTPHeaderField: "Host")
-            request.setValue("close", forHTTPHeaderField: "Connection")
-            request.setValue("OmniWARP/1.0", forHTTPHeaderField: "User-Agent")
 
-            let clock = ContinuousClock()
-            let started = clock.now
-            do {
-                let (data, response) = try await session.data(for: request)
-                let duration = started.duration(to: clock.now)
-                let rtt = Double(duration.components.seconds) * 1000
-                    + Double(duration.components.attoseconds) / 1_000_000_000_000_000
-                let status = (response as? HTTPURLResponse)?.statusCode
-                lastStatus = status
+            // HTTPS первичен: DPI на сотовых сетях режет plain HTTP
+            // к IP, не входящим в белый список. HTTPS-пакет к Cloudflare
+            // TTL-маскировкой обойти сложнее, но trace на том же IP работает.
+            let schemes = ["https", "http"]
+            for scheme in schemes {
+                guard let url = URL(string: "\(scheme)://\(ip)/cdn-cgi/trace") else {
+                    throw EndpointScoutError.invalidIPv4
+                }
+                var request = URLRequest(
+                    url: url,
+                    cachePolicy: .reloadIgnoringLocalAndRemoteCacheData,
+                    timeoutInterval: configuration.requestTimeout
+                )
+                request.httpMethod = "GET"
+                request.setValue("trace.cloudflare.com", forHTTPHeaderField: "Host")
+                request.setValue("close", forHTTPHeaderField: "Connection")
+                request.setValue("OmniWARP/1.0", forHTTPHeaderField: "User-Agent")
 
-                let fields = Self.parseTrace(data)
-                let colo = fields["colo"]?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-                if let status, (200..<300).contains(status), let colo, !colo.isEmpty {
-                    successfulRTTs.append(rtt)
-                    lastColo = colo
-                    successfulStatus = status
-                    if let warp = fields["warp"] { warpEnabled = warp.lowercased() == "on" }
+                let clock = ContinuousClock()
+                let started = clock.now
+                do {
+                    let (data, response) = try await session.data(for: request)
+                    let duration = started.duration(to: clock.now)
+                    let rtt = Double(duration.components.seconds) * 1000
+                        + Double(duration.components.attoseconds) / 1_000_000_000_000_000
+                    let status = (response as? HTTPURLResponse)?.statusCode
+                    lastStatus = status
+
+                    let fields = Self.parseTrace(data)
+                    let colo = fields["colo"]?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+                    if let status, (200..<300).contains(status), let colo, !colo.isEmpty {
+                        successfulRTTs.append(rtt)
+                        lastColo = colo
+                        successfulStatus = status
+                        if let warp = fields["warp"] { warpEnabled = warp.lowercased() == "on" }
+                        break // HTTPS или HTTP сработал — идём к следующей пробе
+                    }
+                } catch {
+                    if Task.isCancelled || (error as? URLError)?.code == .cancelled {
+                        throw CancellationError()
+                    }
+                    // Пробуем следующий scheme (HTTP после HTTPS).
                 }
-            } catch {
-                if Task.isCancelled || (error as? URLError)?.code == .cancelled {
-                    throw CancellationError()
-                }
-                // Сетевой сбой — реальная неудачная попытка, учтённая в loss.
             }
         }
 
