@@ -90,9 +90,12 @@ final class AutoSetupViewModel {
                 let driver = AppTunnelTestDriver(tunnelManager: tunnel)
                 let validator = CandidateValidator(
                     configuration: ValidationConfiguration(
+                        // 8 с — как в Zapret-Manager, но на сотовых сетях
+                        // первый ответ Cloudflare иногда приходит дольше.
+                        handshakeTimeout: 12.0,
                         rttPlan: RTTProbePlan(attempts: 3, timeout: 2, transport: .tcp),
                         maxAttempts: endpoints.count,
-                        maxDuration: 120,
+                        maxDuration: 180,
                         stopAfterFreshColos: 3
                     ),
                     driver: driver
